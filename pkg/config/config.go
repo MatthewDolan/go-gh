@@ -147,30 +147,55 @@ func Write(c *Config) error {
 	defer c.mu.Unlock()
 	hosts, err := c.entries.FindEntry("hosts")
 	if err == nil && hosts.IsModified() {
-		err := writeFile(hostsConfigFile(), []byte(hosts.String()))
-		if err != nil {
+		if err := writeHosts(hosts); err != nil {
 			return err
 		}
-		hosts.SetUnmodified()
 	}
 
 	if c.entries.IsModified() {
-		// Hosts gets written to a different file above so remove it
-		// before writing and add it back in after writing.
-		hostsMap, hostsErr := c.entries.FindEntry("hosts")
-		if hostsErr == nil {
-			_ = c.entries.RemoveEntry("hosts")
-		}
-		err := writeFile(generalConfigFile(), []byte(c.entries.String()))
-		if err != nil {
+		if err := writeGeneralConfig(c); err != nil {
 			return err
-		}
-		c.entries.SetUnmodified()
-		if hostsErr == nil {
-			c.entries.AddEntry("hosts", hostsMap)
 		}
 	}
 
+	return nil
+}
+
+func writeHosts(hosts *yamlmap.Map) error {
+	if hosts.Empty() {
+		if err := removeFile(hostsConfigFile()); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	marshalled, err := yamlmap.Marshal(hosts)
+	if err != nil {
+		return err
+	}
+	if err := writeFile(hostsConfigFile(), marshalled); err != nil {
+		return err
+	}
+	hosts.SetUnmodified()
+
+	return nil
+}
+
+func writeGeneralConfig(c *Config) error {
+	// Hosts gets written to a different file above so remove it
+	// before writing and add it back in after writing.
+	hostsMap, hostsErr := c.entries.FindEntry("hosts")
+	if hostsErr == nil {
+		_ = c.entries.RemoveEntry("hosts")
+	}
+	err := writeFile(generalConfigFile(), []byte(c.entries.String()))
+	if err != nil {
+		return err
+	}
+	c.entries.SetUnmodified()
+	if hostsErr == nil {
+		c.entries.AddEntry("hosts", hostsMap)
+	}
 	return nil
 }
 
@@ -293,6 +318,14 @@ func writeFile(filename string, data []byte) error {
 	defer file.Close()
 	_, err = file.Write(data)
 	return err
+}
+
+func removeFile(filename string) error {
+	err := os.Remove(filename)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
 
 var defaultGeneralEntries = `
