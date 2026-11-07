@@ -4,8 +4,6 @@ on:
     branches: [trunk]
   pull_request:
     branches: [trunk]
-  schedule:
-    - cron: '0 0 * * 0'
 permissions:
   actions: read
   contents: read
